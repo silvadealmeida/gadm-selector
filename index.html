@@ -268,15 +268,17 @@
             ? 'gadm_level=0'
             : `gadm_level=${level} AND gid_${level-1}=${parentId}`;
 
-        return base +
+        return (
+            base +
             '?service=WFS' +
             '&version=1.0.0' +
             '&request=GetFeature' +
-            `&typeName=${typeName}` +                       // mantém “:”
+            `&typeName=${typeName}` +              // mantém “:”
             '&maxFeatures=1000' +
-            '&outputFormat=text/javascript' +               // mantém “/”
-            `&CQL_FILTER=${encodeURIComponent(cql)}` +      // SÓ aqui escapa
-            `&format_options=callback:${cbName}`;           // mantém “:”
+            '&outputFormat=application/json' +     // <- aqui
+            `&CQL_FILTER=${encodeURIComponent(cql)}` +
+            `&callback=${cbName}`                  // <- aqui
+        );
     }
     // Substitua a função loadData por esta versão melhorada
       // Modifique a função loadData para usar a URL que funciona

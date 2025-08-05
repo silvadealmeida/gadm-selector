@@ -278,7 +278,8 @@
             `&CQL_FILTER=${encodeURIComponent(cql)}`;
 
         /* Proxy público que insere Access-Control-Allow-Origin: *          */
-        return 'https://corsproxy.io/?' + encodeURIComponent(real);
+        return 'https://thingproxy.freeboard.io/fetch/' + encodeURIComponent(real);
+
     }
 
 

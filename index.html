@@ -265,22 +265,29 @@
        MONTA a URL WFS e a envelopa no proxy CORS
        ------------------------------------------------------------------*/
     function buildWfsUrl(level, parentId = null) {
-        const typeName = 'gadm:gadm_410';
-        const cql = level === 0
-            ? 'gadm_level=0'
-            : `gadm_level=${level} AND gid_${level - 1}=${parentId}`;
+            const typeName = 'gadm:gadm_410';
 
-        const real = 'https://repository.zalf.de/geoserver/gadm/ows' +
-            '?service=WFS&version=1.0.0&request=GetFeature' +
-            `&typeName=${encodeURIComponent(typeName)}` +      // OK escapado
-            '&maxFeatures=1000' +
-            '&outputFormat=application/json' +
-            `&CQL_FILTER=${encodeURIComponent(cql)}`;
+            const cql = level === 0
+                ? 'gadm_level=0'
+                : `gadm_level=${level} AND gid_${level - 1}=${parentId}`;
 
-        /* Proxy público que insere Access-Control-Allow-Origin: *          */
-        return 'https://thingproxy.freeboard.io/fetch/' + encodeURIComponent(real);
+            /* só os campos que você realmente usa                           */
+            const props = level === 0 ? 'gid_0,name_0'
+                : level === 1 ? 'gid_1,name_1,gid_0'
+                    : level === 2 ? 'gid_2,name_2,gid_1'
+                        : 'gid_3,name_3,gid_2';
 
-    }
+            const real = 'https://repository.zalf.de/geoserver/gadm/ows' +
+                '?service=WFS&version=1.0.0&request=GetFeature' +
+                `&typeName=${encodeURIComponent(typeName)}` +
+                '&outputFormat=application/json' +
+                '&maxFeatures=5000' +                         /* ainda seguro */
+                `&propertyName=${props}` +                    /* ← sem geometria */
+                `&CQL_FILTER=${encodeURIComponent(cql)}`;
+
+            /* proxy CORS que aceita até ~10 MB */
+            return 'https://api.allorigins.win/raw?url=' + encodeURIComponent(real);
+        }
 
 
     /* ------------------------------------------------------------------

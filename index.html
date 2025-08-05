@@ -261,28 +261,31 @@
       }).addTo(map);
     }
 
-    function buildWfsUrl(level, parentId, cbName) {
-        const base = 'https://repository.zalf.de/geoserver/gadm/ows';
-        const typeName = 'gadm:gadm_410';
-        const cql = level === 0
-            ? 'gadm_level=0'
-            : `gadm_level=${level} AND gid_${level-1}=${parentId}`;
+    /* --------------------------------------------------------------------
+       1.  MONTA A URL  (fazendo proxy CORS em corsproxy.io)
+       --------------------------------------------------------------------*/
+        function buildWfsUrl(level, parentId = null) {
+            const typeName = 'gadm:gadm_410';
+            const cql = level === 0
+                ? 'gadm_level=0'
+                : `gadm_level=${level} AND gid_${level - 1}=${parentId}`;
 
-        return (
-            base +
-            '?service=WFS' +
-            '&version=1.0.0' +
-            '&request=GetFeature' +
-            `&typeName=${typeName}` +              // mantém “:”
-            '&maxFeatures=1000' +
-            '&outputFormat=application/json' +     // <- aqui
-            `&CQL_FILTER=${encodeURIComponent(cql)}` +
-            `&callback=${cbName}`                  // <- aqui
-        );
-    }
-    // Substitua a função loadData por esta versão melhorada
-      // Modifique a função loadData para usar a URL que funciona
-      function loadData(level, parentId = null) {
+            const real = 'https://repository.zalf.de/geoserver/gadm/ows' +
+                '?service=WFS&version=1.0.0&request=GetFeature' +
+                `&typeName=${encodeURIComponent(typeName)}` +   // ok escapar :
+                '&maxFeatures=1000' +
+                '&outputFormat=application/json' +
+                `&CQL_FILTER=${encodeURIComponent(cql)}`;
+
+            // corsproxy.io injeta Access-Control-Allow-Origin: *
+            return 'https://corsproxy.io/?' + encodeURIComponent(real);
+        }
+
+
+        /* --------------------------------------------------------------------
+           2.  CARREGA OS DADOS COM FETCH  (sem CORS agora)
+           --------------------------------------------------------------------*/
+        function loadData(level, parentId = null) {
             const loading = $(`#${levelSelectors[level]}-loading`);
             const input = $(`#${levelSelectors[level]}-input`);
             const select = $(`#${levelSelectors[level]}-select`);
@@ -290,12 +293,14 @@
             loading.show();
             input.val('').prop('disabled', true);
 
-            // callback única
-            const cbName = 'wfs_cb_' + Date.now() + '_' +
-                Math.random().toString(36).slice(2);
+            const url = buildWfsUrl(level, parentId);
 
-            window[cbName] = geojson => {
-                try {
+            fetch(url)
+                .then(resp => {
+                    if (!resp.ok) throw new Error(resp.status);
+                    return resp.json();
+                })
+                .then(geojson => {
                     const items = (geojson.features || []).map(f => ({
                         id: f.properties[`gid_${level}`],
                         name: f.properties[`name_${level}`] || f.properties.name_0,
@@ -309,7 +314,8 @@
 
                     select.empty();
                     items.forEach(it => select.append(
-                        `<option value="${it.id}">${it.name}</option>`));
+                        `<option value="${it.id}">${it.name}</option>`
+                    ));
 
                     setupAutocomplete(level);
                     showLevel(level);
@@ -317,30 +323,18 @@
                     if (level === 0 && items.length) {
                         select.val(items[0].id).trigger('change');
                     }
-                } catch (e) {
-                    showError('Erro ao processar dados: ' + e.message);
-                } finally {
-                    cleanup();
-                }
-            };
-
-            // dispara o JSONP
-            const script = document.createElement('script');
-            script.src = buildWfsUrl(level, parentId, cbName);
-            script.onerror = () => { showError('Falha no JSONP'); cleanup(); };
-            document.head.appendChild(script);
-
-            function cleanup() {
-                delete window[cbName];
-                document.head.removeChild(script);
-                loading.hide();
-                input.prop('disabled', false);
-            }
+                })
+                .catch(err => showError('Erro ao carregar: ' + err.message))
+                .finally(() => {
+                    loading.hide();
+                    input.prop('disabled', false);
+                });
         }
+
       
       
       // Adicione esta função para mostrar erros de forma mais amigável
-      function showError(message) {
+    function showError(message) {
         const errorHtml = `
         <div class="alert alert-danger alert-dismissible fade show" role="alert">
             ${message}

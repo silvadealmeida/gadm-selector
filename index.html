@@ -261,77 +261,74 @@
       }).addTo(map);
     }
 
-    /* --------------------------------------------------------------------
-       1.  MONTA A URL  (fazendo proxy CORS em corsproxy.io)
-       --------------------------------------------------------------------*/
-        function buildWfsUrl(level, parentId = null) {
-            const typeName = 'gadm:gadm_410';
-            const cql = level === 0
-                ? 'gadm_level=0'
-                : `gadm_level=${level} AND gid_${level - 1}=${parentId}`;
+    /* ------------------------------------------------------------------
+       MONTA a URL WFS e a envelopa no proxy CORS
+       ------------------------------------------------------------------*/
+    function buildWfsUrl(level, parentId = null) {
+        const typeName = 'gadm:gadm_410';
+        const cql = level === 0
+            ? 'gadm_level=0'
+            : `gadm_level=${level} AND gid_${level - 1}=${parentId}`;
 
-            const real = 'https://repository.zalf.de/geoserver/gadm/ows' +
-                '?service=WFS&version=1.0.0&request=GetFeature' +
-                `&typeName=${encodeURIComponent(typeName)}` +   // ok escapar :
-                '&maxFeatures=1000' +
-                '&outputFormat=application/json' +
-                `&CQL_FILTER=${encodeURIComponent(cql)}`;
+        const real = 'https://repository.zalf.de/geoserver/gadm/ows' +
+            '?service=WFS&version=1.0.0&request=GetFeature' +
+            `&typeName=${encodeURIComponent(typeName)}` +      // OK escapado
+            '&maxFeatures=1000' +
+            '&outputFormat=application/json' +
+            `&CQL_FILTER=${encodeURIComponent(cql)}`;
 
-            // corsproxy.io injeta Access-Control-Allow-Origin: *
-            return 'https://corsproxy.io/?' + encodeURIComponent(real);
-        }
+        /* Proxy público que insere Access-Control-Allow-Origin: *          */
+        return 'https://corsproxy.io/?' + encodeURIComponent(real);
+    }
 
 
-        /* --------------------------------------------------------------------
-           2.  CARREGA OS DADOS COM FETCH  (sem CORS agora)
-           --------------------------------------------------------------------*/
-        function loadData(level, parentId = null) {
-            const loading = $(`#${levelSelectors[level]}-loading`);
-            const input = $(`#${levelSelectors[level]}-input`);
-            const select = $(`#${levelSelectors[level]}-select`);
+    /* ------------------------------------------------------------------
+        CARREGA dados para o nível pedido usando fetch (sem CORS agora)
+        ------------------------------------------------------------------*/
+    function loadData(level, parentId = null) {
+        const loading = $(`#${levelSelectors[level]}-loading`);
+        const input = $(`#${levelSelectors[level]}-input`);
+        const select = $(`#${levelSelectors[level]}-select`);
 
-            loading.show();
-            input.val('').prop('disabled', true);
+        loading.show();
+        input.val('').prop('disabled', true);
 
-            const url = buildWfsUrl(level, parentId);
+        fetch(buildWfsUrl(level, parentId))
+            .then(resp => {
+                if (!resp.ok) throw new Error(resp.status);
+                return resp.json();                                      // GeoJSON
+            })
+            .then(geojson => {
+                const items = (geojson.features || []).map(f => ({
+                    id: f.properties[`gid_${level}`],
+                    name: f.properties[`name_${level}`] || f.properties.name_0,
+                    feature: f
+                })).sort((a, b) => a.name.localeCompare(b.name));
 
-            fetch(url)
-                .then(resp => {
-                    if (!resp.ok) throw new Error(resp.status);
-                    return resp.json();
-                })
-                .then(geojson => {
-                    const items = (geojson.features || []).map(f => ({
-                        id: f.properties[`gid_${level}`],
-                        name: f.properties[`name_${level}`] || f.properties.name_0,
-                        feature: f
-                    })).sort((a, b) => a.name.localeCompare(b.name));
+                if (level === 0) countryData = items;
+                else if (level === 1) stateData = items;
+                else if (level === 2) cityData = items;
+                else districtData = items;
 
-                    if (level === 0) countryData = items;
-                    else if (level === 1) stateData = items;
-                    else if (level === 2) cityData = items;
-                    else districtData = items;
+                select.empty();
+                items.forEach(it =>
+                    select.append(`<option value="${it.id}">${it.name}</option>`));
 
-                    select.empty();
-                    items.forEach(it => select.append(
-                        `<option value="${it.id}">${it.name}</option>`
-                    ));
+                setupAutocomplete(level);
+                showLevel(level);
 
-                    setupAutocomplete(level);
-                    showLevel(level);
+                if (level === 0 && items.length) {
+                    /* pré-seleciona o 1.º país para demonstrar */
+                    select.val(items[0].id).trigger('change');
+                }
+            })
+            .catch(err => showError('Erro ao carregar: ' + err.message))
+            .finally(() => {
+                loading.hide();
+                input.prop('disabled', false);
+            });
+    }
 
-                    if (level === 0 && items.length) {
-                        select.val(items[0].id).trigger('change');
-                    }
-                })
-                .catch(err => showError('Erro ao carregar: ' + err.message))
-                .finally(() => {
-                    loading.hide();
-                    input.prop('disabled', false);
-                });
-        }
-
-      
       
       // Adicione esta função para mostrar erros de forma mais amigável
     function showError(message) {
